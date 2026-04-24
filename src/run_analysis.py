@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -239,6 +240,61 @@ def main() -> None:
         cost_curve_figure(sweep, best["threshold"], fig_dir / f"cost-curve-{name}.png", f"{name.replace('_', ' ').title()}: expected cost vs. threshold")
         pred = (scores >= best["threshold"]).astype(int)
         confusion_figure(y_test, pred, f"{name.replace('_', ' ').title()} at min-cost threshold", fig_dir / f"confusion-{name}.png")
+
+    # Cost-ratio animation for XGBoost: sweep the ratio of FN:FP cost and see how
+    # the minimum-cost threshold migrates. This is the figure that makes the
+    # policy-vs-model argument visible on one axis.
+    xgb_scores = model_scores["xgboost"]
+    fn_over_fp_ratios = np.linspace(2, 60, 30)
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.set_xlabel("Decision threshold")
+    ax.set_ylabel("Expected cost (EUR) for flagged half of test set")
+    ax.set_title("XGBoost cost curve as the missed-fraud/review-cost ratio grows")
+    thresholds = np.linspace(0.001, 0.99, 200)
+    frames_data = []
+    for ratio in fn_over_fp_ratios:
+        fp_cost = 5.0
+        fn_cost = 5.0 * ratio
+        costs = []
+        best_t = None
+        best_c = np.inf
+        for t in thresholds:
+            pred = (xgb_scores >= t).astype(int)
+            tn_, fp_, fn_, tp_ = confusion_matrix(y_test, pred, labels=[0, 1]).ravel()
+            c = fn_cost * fn_ + fp_cost * fp_
+            costs.append(c)
+            if c < best_c:
+                best_c = c
+                best_t = t
+        frames_data.append((ratio, np.array(costs), best_t, best_c))
+
+    line, = ax.plot([], [], lw=2, color="#2d3047")
+    vline = ax.axvline(0, color="#e1a94b", ls=":", lw=2)
+    txt = ax.text(0.02, 0.95, "", transform=ax.transAxes, fontsize=11, va="top")
+    ax.set_xlim(0, 1)
+    all_costs = np.concatenate([fc[1] for fc in frames_data])
+    ax.set_ylim(0, all_costs.max() * 1.05)
+
+    def animate(i):
+        ratio, costs, best_t, best_c = frames_data[i]
+        line.set_data(thresholds, costs)
+        vline.set_xdata([best_t, best_t])
+        txt.set_text(f"FN : FP cost ratio = {ratio:.0f} : 1\nmin-cost threshold = {best_t:.3f}\nmin cost = {best_c:,.0f} EUR")
+        return line, vline, txt
+
+    anim = animation.FuncAnimation(fig, animate, frames=len(frames_data), interval=350, blit=True)
+    anim.save(str(fig_dir / "cost-ratio-animation.gif"), writer="pillow", fps=3)
+    plt.close(fig)
+
+    # Class distribution across V1..V28 for a random pair of features
+    fig, axes = plt.subplots(2, 3, figsize=(12, 7))
+    for ax_, feat in zip(axes.flat, ["V1", "V3", "V4", "V10", "V14", "V17"]):
+        sns.kdeplot(data=df, x=feat, hue="Class", ax=ax_, common_norm=False, palette=["#4c72b0", "#c44e52"], fill=True, alpha=0.35)
+        ax_.set_title(f"{feat} density by class")
+    plt.suptitle("Where the PCA features actually separate the classes", y=1.01)
+    fig.tight_layout()
+    fig.savefig(fig_dir / "feature-kde.png")
+    plt.close(fig)
 
     summary = {
         "dataset": {
