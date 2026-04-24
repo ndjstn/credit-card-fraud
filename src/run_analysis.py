@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -30,12 +31,22 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _palette import CREDIT_CARD_FRAUD as P, apply_to_mpl  # noqa: E402
+
 RNG = 42
 COST_FN = 100.0
 COST_FP = 5.0
 
-plt.rcParams.update({"figure.dpi": 120, "savefig.dpi": 150, "font.size": 11})
 sns.set_style("whitegrid")
+apply_to_mpl(P)
+plt.rcParams.update({"figure.dpi": 120, "savefig.dpi": 150, "font.size": 11})
+
+
+def _cmap_blues():
+    """A palette-native cmap running from bg through muted to accent."""
+    from matplotlib.colors import LinearSegmentedColormap
+    return LinearSegmentedColormap.from_list("project", [P.bg, P.muted, P.accent])
 
 
 def parse_args() -> argparse.Namespace:
@@ -49,7 +60,7 @@ def parse_args() -> argparse.Namespace:
 def class_balance_figure(y: pd.Series, path: Path) -> None:
     counts = y.value_counts().sort_index()
     fig, ax = plt.subplots(figsize=(7, 4))
-    bars = ax.bar(["Legitimate", "Fraud"], counts.values, color=["#4c72b0", "#c44e52"])
+    bars = ax.bar(["Legitimate", "Fraud"], counts.values, color=[P.muted, P.accent])
     for bar, val in zip(bars, counts.values):
         ax.text(bar.get_x() + bar.get_width() / 2, val, f"{val:,}", ha="center", va="bottom")
     ax.set_ylabel("Transactions")
@@ -62,8 +73,8 @@ def class_balance_figure(y: pd.Series, path: Path) -> None:
 
 def amount_distribution_figure(df: pd.DataFrame, path: Path) -> None:
     fig, ax = plt.subplots(figsize=(8, 4.5))
-    ax.hist(df.loc[df["Class"] == 0, "Amount"], bins=80, range=(0, 500), alpha=0.55, color="#4c72b0", label="Legitimate")
-    ax.hist(df.loc[df["Class"] == 1, "Amount"], bins=80, range=(0, 500), alpha=0.75, color="#c44e52", label="Fraud")
+    ax.hist(df.loc[df["Class"] == 0, "Amount"], bins=80, range=(0, 500), alpha=0.55, color=P.muted, label="Legitimate")
+    ax.hist(df.loc[df["Class"] == 1, "Amount"], bins=80, range=(0, 500), alpha=0.75, color=P.accent, label="Fraud")
     ax.set_xlabel("Transaction amount (EUR)")
     ax.set_ylabel("Count")
     ax.set_title("Transaction amount distribution, clipped at 500 EUR")
@@ -77,7 +88,7 @@ def time_pattern_figure(df: pd.DataFrame, path: Path) -> None:
     hours = (df["Time"] / 3600).astype(int) % 24
     fraud_rate = df.assign(Hour=hours).groupby("Hour")["Class"].mean() * 1000
     fig, ax = plt.subplots(figsize=(8, 4.5))
-    ax.bar(fraud_rate.index, fraud_rate.values, color="#c44e52")
+    ax.bar(fraud_rate.index, fraud_rate.values, color=P.accent)
     ax.set_xlabel("Hour of day (UTC, derived from Time seconds)")
     ax.set_ylabel("Fraud per 1,000 transactions")
     ax.set_title("Fraud rate by hour: the raw rate is not flat across the day")
@@ -111,10 +122,10 @@ def sweep_costs(y_true: np.ndarray, scores: np.ndarray) -> pd.DataFrame:
 
 def cost_curve_figure(sweep: pd.DataFrame, best_threshold: float, path: Path, title: str) -> None:
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(sweep["threshold"], sweep["total_cost"], color="#2d3047", label="Total cost")
-    ax.plot(sweep["threshold"], sweep["fraud_missed_cost"], color="#c44e52", ls="--", label="Missed fraud cost")
-    ax.plot(sweep["threshold"], sweep["review_cost"], color="#4c72b0", ls="--", label="Review cost")
-    ax.axvline(best_threshold, color="#e1a94b", ls=":", lw=2, label=f"Min-cost threshold = {best_threshold:.2f}")
+    ax.plot(sweep["threshold"], sweep["total_cost"], color=P.header_bg, label="Total cost")
+    ax.plot(sweep["threshold"], sweep["fraud_missed_cost"], color=P.accent, ls="--", label="Missed fraud cost")
+    ax.plot(sweep["threshold"], sweep["review_cost"], color=P.muted, ls="--", label="Review cost")
+    ax.axvline(best_threshold, color=P.cover_subtitle, ls=":", lw=2, label=f"Min-cost threshold = {best_threshold:.2f}")
     ax.set_xlabel("Decision threshold")
     ax.set_ylabel(f"Expected cost (EUR, with $FN={int(COST_FN)}, $FP={int(COST_FP)})")
     ax.set_title(title)
@@ -131,7 +142,7 @@ def pr_curve_figure(y_true: np.ndarray, model_scores: dict, path: Path) -> None:
         ap = average_precision_score(y_true, scores)
         ax.plot(recall, precision, color=color, lw=2, label=f"{name} (AP = {ap:.3f})")
     baseline = y_true.mean()
-    ax.axhline(baseline, color="gray", ls=":", label=f"Baseline = {baseline:.4f}")
+    ax.axhline(baseline, color=P.muted, ls=":", label=f"Baseline = {baseline:.4f}")
     ax.set_xlabel("Recall")
     ax.set_ylabel("Precision")
     ax.set_title("Precision-recall curves, test set")
@@ -145,7 +156,7 @@ def confusion_figure(y_true: np.ndarray, y_pred: np.ndarray, title: str, path: P
     cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
     fig, ax = plt.subplots(figsize=(5.5, 4.5))
     sns.heatmap(
-        cm, annot=True, fmt=",d", cmap="Blues", cbar=False,
+        cm, annot=True, fmt=",d", cmap=_cmap_blues(), cbar=False,
         xticklabels=["Pred legit", "Pred fraud"],
         yticklabels=["Actual legit", "Actual fraud"], ax=ax,
     )
@@ -207,9 +218,9 @@ def main() -> None:
     pr_curve_figure(
         y_test,
         {
-            "Logistic regression": (logreg_scores, "#4c72b0"),
-            "XGBoost": (xgb_scores, "#c44e52"),
-            "Isolation Forest": (iforest_scores, "#55a868"),
+            "Logistic regression": (logreg_scores, P.muted),
+            "XGBoost": (xgb_scores, P.accent),
+            "Isolation Forest": (iforest_scores, P.cover_subtitle),
         },
         fig_dir / "precision-recall.png",
     )
@@ -268,8 +279,8 @@ def main() -> None:
                 best_t = t
         frames_data.append((ratio, np.array(costs), best_t, best_c))
 
-    line, = ax.plot([], [], lw=2, color="#2d3047")
-    vline = ax.axvline(0, color="#e1a94b", ls=":", lw=2)
+    line, = ax.plot([], [], lw=2, color=P.header_bg)
+    vline = ax.axvline(0, color=P.cover_subtitle, ls=":", lw=2)
     txt = ax.text(0.02, 0.95, "", transform=ax.transAxes, fontsize=11, va="top")
     ax.set_xlim(0, 1)
     all_costs = np.concatenate([fc[1] for fc in frames_data])
@@ -289,7 +300,7 @@ def main() -> None:
     # Class distribution across V1..V28 for a random pair of features
     fig, axes = plt.subplots(2, 3, figsize=(12, 7))
     for ax_, feat in zip(axes.flat, ["V1", "V3", "V4", "V10", "V14", "V17"]):
-        sns.kdeplot(data=df, x=feat, hue="Class", ax=ax_, common_norm=False, palette=["#4c72b0", "#c44e52"], fill=True, alpha=0.35)
+        sns.kdeplot(data=df, x=feat, hue="Class", ax=ax_, common_norm=False, palette=[P.muted, P.accent], fill=True, alpha=0.35)
         ax_.set_title(f"{feat} density by class")
     plt.suptitle("Where the PCA features actually separate the classes", y=1.01)
     fig.tight_layout()
