@@ -1,0 +1,4 @@
+model,roc_auc,average_precision,threshold,recall,precision,missed_fraud,false_review,total_cost_eur
+logistic_regression,0.9727,0.7062,0.97,0.854,0.507,18,102,2310.0
+xgboost,0.9788,0.863,0.01,0.862,0.573,17,79,2095.0
+isolation_forest,0.9463,0.1133,0.55,0.585,0.092,51,710,8650.0
