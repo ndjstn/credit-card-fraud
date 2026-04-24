@@ -1,8 +1,8 @@
 # The Default Threshold Is the Bug: Credit Card Fraud on the ULB Benchmark
 
-A fraud classifier trained on the famous ULB Kaggle dataset reaches 0.98 ROC-AUC and still ships a policy most fraud teams would reject. At the default 0.5 decision threshold, the confusion matrix underneath that impressive headline is the part nobody wants to look at. This repo is the pipeline, the figures, and the cost-sensitive threshold analysis that explain why the threshold is a policy decision, not a hyperparameter.
+An XGBoost classifier on the famous ULB Kaggle fraud dataset reaches 0.98 ROC-AUC and still ships a policy most fraud teams would reject. At the default 0.5 decision threshold, the confusion matrix underneath that impressive headline is the part nobody wants to look at. This repo is the pipeline, the figures, and the cost-sensitive threshold analysis that explain why the threshold is a policy decision, not a hyperparameter.
 
-The companion walkthrough video and the full write-up with figures and narrative are linked at the bottom.
+The walkthrough video and the full write-up with figures are linked at the bottom.
 
 ## Key results
 
@@ -16,9 +16,9 @@ Cost assumptions: a missed fraud costs 100 EUR, a false positive review costs 5 
 
 ## What is in this repo
 
-`src/run_analysis.py` is a single end-to-end script that loads the Kaggle ULB dataset, profiles the class balance and the amount and time distributions, fits the three classifiers with the appropriate weighting, runs the cost sweep, and writes every figure and table under `figures/` and `outputs/`. `figures/` holds the cost curves, precision-recall curve, confusion matrices, and exploratory plots used in the write-up and the video. `outputs/` holds `analysis_summary.json`, `analysis_summary.md`, the per-model cost-sweep tables, and the head-to-head model comparison.
+`src/run_analysis.py` is a single end-to-end script that loads the Kaggle ULB dataset, profiles class balance and amount/time distributions, fits the three classifiers with the appropriate weighting, runs the cost sweep, and writes every figure and table under `figures/` and `outputs/`. `notebooks/credit-card-fraud-analysis.ipynb` is the same pipeline as a narrative notebook — same results, more room to explain each step. `figures/` holds the cost curves, precision-recall curve, confusion matrices, class-balance chart, and the cost-ratio animation. `outputs/` holds the model-comparison table, the per-model cost-sweep CSVs, and a JSON summary.
 
-`REPORT.md` is a long-form written analysis covering the dataset, the three classifiers, the cost-sensitive threshold sweep, and a discussion of what the findings do and do not support.
+`REPORT.md` is the long-form written analysis covering the dataset, the three classifiers, the cost-sensitive threshold sweep, and the honest limits on what the findings do and don't support.
 
 ## How to reproduce
 
